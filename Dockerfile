@@ -21,4 +21,4 @@ ENV PORT=8080
 EXPOSE 8080
 
 # 7. FastAPI 구동 (Cloud Run 스펙에 맞게 호스트와 포트 바인딩)
-CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8080"]
+CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8080"]
