@@ -1,8 +1,8 @@
 # main.py
 from fastapi import FastAPI, UploadFile, File, HTTPException
 from fastapi.middleware.cors import CORSMiddleware  # ⭐️ CORS 미들웨어 임포트
-from parser import extract_raw_tables_from_pdf
-from transformer import parse_table_to_json
+from app.parser import extract_raw_tables_from_pdf
+from app.transformer import parse_table_to_json
 
 app = FastAPI(
     title="은행 거래내역서 PDF 파서 API",
