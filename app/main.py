@@ -1,5 +1,5 @@
 # main.py
-from fastapi import FastAPI, UploadFile, File, HTTPException
+from fastapi import FastAPI, UploadFile, File, HTTPException, status
 from fastapi.middleware.cors import CORSMiddleware  # ⭐️ CORS 미들웨어 임포트
 from app.parser import extract_raw_tables_from_pdf
 from app.transformer import parse_table_to_json
@@ -44,7 +44,7 @@ async def parse_bank_pdf(file: UploadFile = File(...),
         pdf_bytes = await file.read()
         
         # 2. PDF 파서 모듈 호출 (순수 거래 데이터 리스트만 가져옴)
-        raw_tables = extract_raw_tables_from_pdf(pdf_bytes)
+        raw_tables = extract_raw_tables_from_pdf(pdf_bytes, password=password)
         
         # 3. 데이터 변환 모듈 호출 (최종 규격 JSON 리스트로 맵핑)
         final_results = []
