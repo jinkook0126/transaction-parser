@@ -29,7 +29,9 @@ app.add_middleware(
 )
 
 @app.post("/parse-bank-pdf", summary="은행 거래내역서 PDF 파싱 및 정제")
-async def parse_bank_pdf(file: UploadFile = File(...)):
+async def parse_bank_pdf(file: UploadFile = File(...),
+                         password: str = Form(...)
+                         ):
     """
     은행 거래내역서 PDF 파일을 업로드하면 데이터를 추출하고
     구조화된 정제 JSON으로 변환하여 반환합니다.
@@ -58,6 +60,19 @@ async def parse_bank_pdf(file: UploadFile = File(...)):
         }
 
     except Exception as e:
+        err_repr = repr(e).lower()
+        err_msg = str(e).lower()
+        if "password" in err_repr or "password" in err_msg or "authenticate" in err_msg:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail={
+                    "success": False,
+                    "code": "PASSWORD_REQUIRED_OR_INVALID",
+                    "message": "PDF가 암호화되어 있거나 비밀번호가 올바르지 않습니다.",
+                    "requiresPassword": True
+                }
+            )
+        
         # 실제 운영 환경에서는 보안을 위해 e의 전체 출력보다는 커스텀 에러 로그를 남기는 것이 안전합니다.
         raise HTTPException(status_code=500, detail=f"파싱 진행 중 오류 발생: {str(e)}")
 
