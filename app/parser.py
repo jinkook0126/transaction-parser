@@ -41,7 +41,7 @@ def extract_raw_tables_from_pdf(pdf_bytes: bytes, password: str = None) -> List[
     pdf_file_like = io.BytesIO(pdf_bytes)
 
     try:
-        with pdfplumber.open(pdf_file_like) as pdf:
+        with pdfplumber.open(pdf_file_like, password=password) as pdf:
             for page in pdf.pages:
                 table_settings = {
                     "vertical_strategy": "lines",

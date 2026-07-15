@@ -3,11 +3,13 @@ from fastapi import FastAPI, UploadFile, File, HTTPException, Form
 from fastapi.middleware.cors import CORSMiddleware  # ⭐️ CORS 미들웨어 임포트
 from app.parser import extract_raw_tables_from_pdf
 from app.transformer import parse_table_to_json
+from pdfminer.pdfdocument import PDFPasswordIncorrect
+from pdfplumber.utils.exceptions import PdfminerException
 
 app = FastAPI(
     title="은행 거래내역서 PDF 파서 API",
     description="업로드된 은행 거래내역 PDF에서 순수 거래 데이터만 추출하여 정제된 JSON으로 반환합니다.",
-    version="1.1.0"
+    version="1.2.2"
 )
 
 # ⭐️ 허용할 오리진(Origin) 목록 설정
@@ -30,7 +32,7 @@ app.add_middleware(
 
 @app.post("/parse-bank-pdf", summary="은행 거래내역서 PDF 파싱 및 정제")
 async def parse_bank_pdf(file: UploadFile = File(...),
-                         password: str = Form(...)
+                         password: str = Form(None)
                          ):
     """
     은행 거래내역서 PDF 파일을 업로드하면 데이터를 추출하고
@@ -42,9 +44,11 @@ async def parse_bank_pdf(file: UploadFile = File(...),
     try:
         # 1. 파일 이진 데이터를 메모리 상에서 읽어들임
         pdf_bytes = await file.read()
+
+        pdf_password = password if password else None
         
         # 2. PDF 파서 모듈 호출 (순수 거래 데이터 리스트만 가져옴)
-        raw_tables = extract_raw_tables_from_pdf(pdf_bytes, password=password)
+        raw_tables = extract_raw_tables_from_pdf(pdf_bytes, password=pdf_password)
         
         # 3. 데이터 변환 모듈 호출 (최종 규격 JSON 리스트로 맵핑)
         final_results = []
@@ -53,28 +57,35 @@ async def parse_bank_pdf(file: UploadFile = File(...),
             final_results.extend(json_records)
 
         return {
-            "success": True,
             "filename": file.filename,
             "total_records": len(final_results),
             "transactions": final_results
         }
 
-    except Exception as e:
-        err_repr = repr(e).lower()
-        err_msg = str(e).lower()
-        if "password" in err_repr or "password" in err_msg or "authenticate" in err_msg:
+    # ⭐️ 3. 비밀번호 틀림 / 누락 관련 구체적인 예외를 먼저 낚아챕니다.
+    except (PDFPasswordIncorrect, PdfminerException) as auth_error:
+        # pdfplumber가 던지는 PdfminerException 내부의 진짜 에러가 password 관련인지 한 번 더 체크합니다.
+        err_str = repr(auth_error).lower()
+        
+        # 'pdfpasswordincorrect' 혹은 'password' 관련 단어가 감지되면 401을 반환합니다.
+        if "password" in err_str or "authenticate" in err_str:
             raise HTTPException(
-                status_code=status.HTTP_401_UNAUTHORIZED,
-                detail={
-                    "success": False,
-                    "code": "PASSWORD_REQUIRED_OR_INVALID",
-                    "message": "PDF가 암호화되어 있거나 비밀번호가 올바르지 않습니다.",
-                    "requiresPassword": True
-                }
+                status_code=401, 
+                detail=f"PDF 비밀번호가 올바르지 않습니다."
             )
         
-        # 실제 운영 환경에서는 보안을 위해 e의 전체 출력보다는 커스텀 에러 로그를 남기는 것이 안전합니다.
-        raise HTTPException(status_code=500, detail=f"파싱 진행 중 오류 발생: {str(e)}")
+        # 비밀번호 에러가 아닌 다른 pdfminer 관련 에러인 경우 500 반환
+        raise HTTPException(
+            status_code=500, 
+            detail=f"PDF 문서 구조를 읽는 중 오류 발생: {str(auth_error)}"
+        )
+
+    # 4. 그 외의 예측하지 못한 런타임 예외 처리
+    except Exception as e:
+        raise HTTPException(
+            status_code=500, 
+            detail=f"파싱 진행 중 일반 오류 발생: {str(e)}"
+        )
 
 
 if __name__ == "__main__":
