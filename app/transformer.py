@@ -16,6 +16,7 @@ def parse_table_to_json(table_data: List[List[str]]) -> List[Dict[str, Any]]:
     col_indices = {
         "date": [],
         "time": [],
+        "type_cols": [],      #  [추가] 구분, 거래구분, 구분코드 등 입/출금 타입이 명시된 열
         "withdraw_cols": [],  # 출금 관련 열 (출금, 찾으신금액, 지급액 등)
         "deposit_cols": [],   # 입금 관련 열 (입금, 맡기신금액, 수납액 등)
         "amount_cols": [],    # 통합 거래금액 열
@@ -34,6 +35,10 @@ def parse_table_to_json(table_data: List[List[str]]) -> List[Dict[str, Any]]:
             if "일시" in col_clean:
                 col_indices["date"].append(idx)
                 
+        #  [추가] 구분(입금/출금) 열 감지
+        if any(kw == col_clean for kw in ["구분", "거래구분", "구분코드"]):
+            col_indices["type_cols"].append(idx)
+
         # 금액 관련 열 감지
         if any(kw in col_clean for kw in ["출금", "찾으신", "지급"]):
             col_indices["withdraw_cols"].append(idx)
@@ -47,7 +52,7 @@ def parse_table_to_json(table_data: List[List[str]]) -> List[Dict[str, Any]]:
             col_indices["desc_cols"].append(idx)
             
         # [신규] memo(내용, 메모, 거래점, 지점) 열 감지
-        if any(kw in col_clean for kw in ["내용", "메모", "거래점", "지점", "취급점"]):
+        if any(kw in col_clean for kw in ["내용", "메모", "거래점", "지점", "취급점","기록"]):
             col_indices["memo_cols"].append(idx)
 
     # 2. 행 데이터 순회 파싱
@@ -96,7 +101,10 @@ def parse_table_to_json(table_data: List[List[str]]) -> List[Dict[str, Any]]:
         amt_deposit = sum(clean_to_int(row[i]) for i in col_indices["deposit_cols"])
         amt_single = sum(clean_to_int(row[i]) for i in col_indices["amount_cols"])
 
-        # 1) 텍스트 분석용 병합 문자열 미리 생성 (description과 memo 필드를 합쳐서 분석)
+        # 1) 구분 열의 텍스트 가져오기
+        type_text = "".join([row[i] for i in col_indices["type_cols"] if row[i]]).replace(" ", "")
+
+        # 텍스트 분석용 병합 문자열 생성
         all_text_cols = list(set(col_indices["desc_cols"] + col_indices["memo_cols"]))
         combined_text = "".join([row[i] for i in all_text_cols if row[i]]).replace(" ", "")
 
@@ -104,17 +112,28 @@ def parse_table_to_json(table_data: List[List[str]]) -> List[Dict[str, Any]]:
         withdraw_keywords = ["출금", "지급", "대체출", "송금", "이체", "지출", "자동이체", "인출", "모바일뱅킹", "인터넷이체"]
         deposit_keywords = ["입금", "수납", "대체입", "환급", "입동", "급여", "자금이체입", "이자"]
 
-        # 2) 타입 판별 실행
-        if amt_withdraw > 0 and amt_deposit == 0:
+        # 2) 타입 판별 실행 (우선순위 부여)
+        
+        # 🌟 [1순위] 구분 열(type_cols)에 "입금"이나 "출금"이 직접 적혀있는 경우
+        if "입금" in type_text:
+            record["transactionType"] = "입금"
+            record["amount"] = max(amt_deposit, amt_single)
+        elif "출금" in type_text:
+            record["transactionType"] = "출금"
+            record["amount"] = max(amt_withdraw, amt_single)
+            
+        # [2순위] 금액 열 분리 구조인 경우 (기존 로직)
+        elif amt_withdraw > 0 and amt_deposit == 0:
             record["amount"] = amt_withdraw
             record["transactionType"] = "출금"
         elif amt_deposit > 0 and amt_withdraw == 0:
             record["amount"] = amt_deposit
             record["transactionType"] = "입금"
+            
+        # [3순위] 금액이 통합되어 있어 적요/메모 및 기호로 유추해야 하는 경우
         else:
             record["amount"] = max(amt_withdraw, amt_deposit, amt_single)
             
-            # 애매한 금액 열 구조일 때 텍스트 우선 판별
             if any(kw in combined_text for kw in deposit_keywords):
                 record["transactionType"] = "입금"
             elif any(kw in combined_text for kw in withdraw_keywords):
