@@ -12,8 +12,6 @@ from fastapi import FastAPI, UploadFile, File, HTTPException, Form
 from fastapi.middleware.cors import CORSMiddleware  # ⭐️ CORS 미들웨어 임포트
 from app.parser import extract_raw_tables_from_pdf
 from app.transformer import parse_table_to_json
-from pdfminer.pdfdocument import PDFPasswordIncorrect
-from pdfplumber.utils.exceptions import PdfminerException
 
 app = FastAPI(
     title="은행 거래내역서 PDF 파서 API",
@@ -69,25 +67,6 @@ async def parse_bank_pdf(file: UploadFile = File(...),
             "transactions": final_results
         }
 
-    # ⭐️ 3. 비밀번호 틀림 / 누락 관련 구체적인 예외를 먼저 낚아챕니다.
-    except (PDFPasswordIncorrect, PdfminerException) as auth_error:
-        # pdfplumber가 던지는 PdfminerException 내부의 진짜 에러가 password 관련인지 한 번 더 체크합니다.
-        err_str = repr(auth_error).lower()
-        
-        # 'pdfpasswordincorrect' 혹은 'password' 관련 단어가 감지되면 401을 반환합니다.
-        if "password" in err_str or "authenticate" in err_str:
-            raise HTTPException(
-                status_code=401, 
-                detail=f"PDF 비밀번호가 올바르지 않습니다."
-            )
-        
-        # 비밀번호 에러가 아닌 다른 pdfminer 관련 에러인 경우 500 반환
-        raise HTTPException(
-            status_code=500, 
-            detail=f"PDF 문서 구조를 읽는 중 오류 발생: {str(auth_error)}"
-        )
-
-    # 4. 그 외의 예측하지 못한 런타임 예외 처리
     except Exception as e:
         raise HTTPException(
             status_code=500, 
