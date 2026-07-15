@@ -32,7 +32,7 @@ app.add_middleware(
 
 @app.post("/parse-bank-pdf", summary="은행 거래내역서 PDF 파싱 및 정제")
 async def parse_bank_pdf(file: UploadFile = File(...),
-                         password: str = Form(None)
+                         password: str = Form(default=None)
                          ):
     """
     은행 거래내역서 PDF 파일을 업로드하면 데이터를 추출하고
