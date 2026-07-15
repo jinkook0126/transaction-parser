@@ -1,4 +1,13 @@
 # main.py
+import sys
+import os
+
+# 현재 파일(main.py)이 있는 위치의 상위 폴더를 파이썬 라이브러리 검색 경로에 강제로 추가합니다.
+current_dir = os.path.dirname(os.path.abspath(__file__))
+parent_dir = os.path.dirname(current_dir)
+if parent_dir not in sys.path:
+    sys.path.insert(0, parent_dir)
+    
 from fastapi import FastAPI, UploadFile, File, HTTPException, Form
 from fastapi.middleware.cors import CORSMiddleware  # ⭐️ CORS 미들웨어 임포트
 from app.parser import extract_raw_tables_from_pdf
@@ -16,9 +25,7 @@ app = FastAPI(
 origins = [
     "http://localhost:5173",    # 로컬 개발용 프론트엔드 (Vite, React 등)
     "http://127.0.0.1:5173",
-    "https://profit-track-two.vercel.app/"
-    # 추후 실제 배포될 프론트엔드 도메인이 생기면 여기에 추가합니다.
-    # 예: "https://your-frontend-app.vercel.app"
+    "https://profit-track-two.vercel.app"
 ]
 
 # ⭐️ CORS 미들웨어 등록
@@ -95,4 +102,4 @@ if __name__ == "__main__":
     # 구글 클라우드가 제공하는 PORT 환경변수가 있으면 쓰고, 없으면 로컬용 8000을 씁니다.
     port = int(os.environ.get("PORT", 8000))
     
-    uvicorn.run("main:app", host="0.0.0.0", port=port, reload=True)
+    uvicorn.run("app.main:app", host="0.0.0.0", port=port, reload=True)
